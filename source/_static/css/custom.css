@@ -1,0 +1,8 @@
+/** css/yourtheme.css **/
+
+@import '../../_themes/sphinx_rtd_theme/static/css/theme.css';
+@import url('https://fonts.googleapis.com/css?family=Nunito&display=swap');
+
+body, h1, h2, h3, h4, h5, h6, p, a {
+    font-family: 'Nunito', sans-serif;
+}
