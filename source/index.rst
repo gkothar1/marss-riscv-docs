@@ -13,7 +13,7 @@ MARSS-RISCV: Micro-architectural System Simulator for RISC-V
       :numbered:
 
       sections/intro
-      sections/riscvemu
+      sections/TinyEMU
       sections/incore-microarch
       sections/oocore-microarch
       sections/branch-pred

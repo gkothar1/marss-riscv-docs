@@ -31,7 +31,7 @@ Decode
 Decode stages decodes the instruction and if illegal, raises an exception. Entries in the branch predictor structures are created for branches if not present.
 
 .. note::
-   For simplicity, SYSTEM major opcode instructions (*csr{r/w}, ecall, sret etc.*) are executed in a **single cycle** due to their complex logic. For this purpose, RISCVEMU complex opcode helper functions are used.
+   For simplicity, SYSTEM major opcode instructions (*csr{r/w}, ecall, sret etc.*) are executed in a **single cycle** due to their complex logic. For this purpose, TinyEMU complex opcode helper functions are used.
 
 Dispatch
 -----------------------------
