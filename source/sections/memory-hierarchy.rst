@@ -79,5 +79,4 @@ DRAM Organization
 
    * Row buffer write hit: ``mem_bus_access_rtt_latency + row_buffer_write_latency``
 
-   * Row buffer write miss: ``mem_bus_access_rtt_latency + tRP
-                                       + tRCD + row_buffer_write_latency``
+   * Row buffer write miss: ``mem_bus_access_rtt_latency + tRP + tRCD + row_buffer_write_latency``
