@@ -65,18 +65,19 @@ DRAM Organization
    * ``Column size``: 8-bit
    * ``Memory bus width``: 64-bit
 
-* Physical address to DRAM mapping:
+* Physical address to DRAM mapping is as follows:
 
 .. figure:: ../figures/dram-addr-map.*
    :figwidth: 700 px
    :align: center
 
-* DRAM access latencies in CPU cycles are calculated as follows:
+* DRAM access latencies in CPU cycles are calculated as follows (These parameters can be configured via simulator's JSON configuration file):
 
-   * Row buffer read hit: ``mem_bus_access_rtt + row_buffer_read``
+   * Row buffer read hit: ``mem_bus_access_rtt + tCL``
 
-   * Row buffer read miss: ``mem_bus_access_rtt + row_read``
+   * Row buffer read miss: ``mem_bus_access_rtt_latency + tRP + tRCD + tCL``
 
-   * Row buffer write hit: ``mem_bus_access_rtt + row_buffer_read + row_write``
+   * Row buffer write hit: ``mem_bus_access_rtt_latency + row_buffer_write_latency``
 
-   * Row buffer write miss: ``mem_bus_access_rtt + row_read + row_write``
+   * Row buffer write miss: ``mem_bus_access_rtt_latency + tRP
+                                       + tRCD + row_buffer_write_latency``
