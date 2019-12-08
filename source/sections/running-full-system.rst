@@ -17,7 +17,7 @@ System requirements
 
 Installing the dependencies
 ---------------------------
-Make sure that you have all the dependencies (`ssl`, `sdl`, and `curl` libraries) installed on the system. For Debian-based (including Ubuntu) systems, the packages are: ``build-essential``, ``libssl-dev``, ``libsdl1.2-dev``, ``libcurl4-openssl-dev``. 
+Make sure that you have all the dependencies (``ssl``, ``sdl``, and ``curl`` libraries) installed on the system. For Debian-based (including Ubuntu) systems, the packages are: ``build-essential``, ``libssl-dev``, ``libsdl1.2-dev``, ``libcurl4-openssl-dev``.
 
 .. code-block:: console
 
@@ -74,35 +74,47 @@ Grow the image file to the desired size (``8GB`` for this tutorial):
 
 	$ truncate --size 8G riscv32.img
 
-Attach the disk image to a loopback device: 
+.. note::
+   Below steps may require ``sudo`` access.
+
+Find the first available ``losetup`` device. On my system, below command returned: ``/dev/loop8``
 
 .. code-block:: console
 
-	$ losetup /dev/loop0 riscv32.img
+	$ sudo losetup -f
+
+Attach the disk image to the given loopback device:
+
+.. code-block:: console
+
+	$ losetup /dev/loop8 riscv32.img
 
 Run fsck before growing the file system:
 
 .. code-block:: console
 
-	$ e2fsck -f /dev/loop0
+	$ e2fsck -f /dev/loop8
+
+.. note::
+   You may require ``e2fsck`` version ``1.43.1`` or greater.
 
 Grow the file system to its maximum size:
 
 .. code-block:: console
 
-	$ resize2fs /dev/loop0
+	$ resize2fs /dev/loop8
 
 Run fsck post resize:
 
 .. code-block:: console
 
-	$ e2fsck -f /dev/loop0
+	$ e2fsck -f /dev/loop8
 
 Detach the loopback device:
 
 .. code-block:: console
 
-	$ losetup -d /dev/loop0
+	$ losetup -d /dev/loop8
 
 At this point, you should have a 32-bit RISC-V Linux image of size 8GB ready to use.
 
@@ -158,7 +170,7 @@ Based on the above configuration, the ``riscvemu.cfg`` will look like below. You
 		lsq_size: 16,                          /* Number of LSQ entries */ 
 
 		/** Tracing and Logging Parameters **/
-		sim_stats_file: "simstats.txt",         /* Path to the file to save simulation stats */
+		sim_stats_path: ".",         	        /* Path to the directory to save simulation stats, NOTE: Absolute path is needed and no `/` is required at the end of the directory path. */
 		sim_trace_file: "simtrace.txt",         /* Path to the file to save commit trace, must compile MARSS-RISCV with CONFIG_SIM_TRACE CFLAG */
 
 		/** Execution Unit Parameters **/
@@ -249,11 +261,17 @@ Once the guest boots, we need to initialize the environment. Normally, this shou
 	$ export PYTHONPATH=/usr/lib64/python2.7/site-packages/
 	$ env-update
 
-The system is ready for use. It has a working GCC compiler, ssh, git, and `more <https://github.com/bucaps/marss-riscv-images/blob/master/riscv32-unknown-linux-gnu/PACKAGES>`_.
+The system is ready for use. It has a working GCC compiler, ssh, git and `more <https://github.com/bucaps/marss-riscv-images/blob/master/riscv32-unknown-linux-gnu/PACKAGES>`_.
 
 Load the benchmark and the simulation utility programs inside the guest VM
 ==========================================================================
-Now we will load the CoreMark benchmark and MARSS-RISCV simulation utility programs inside the guest VM. For that, on the guest VM terminal, type:
+Now we will load the CoreMark benchmark and MARSS-RISCV simulation utility programs using ``git clone`` inside the guest VM. Before that, you may want to set the time to the current time in the VM manually. So in guest terminal, type:
+
+.. code-block:: console
+
+	$ date --set="9 Dec 2019 10:00:00"
+
+To clone the repos, type:
 
 .. code-block:: console
 
