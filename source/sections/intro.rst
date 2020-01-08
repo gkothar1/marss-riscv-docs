@@ -1,7 +1,7 @@
 ============
 Introduction
 ============
-MARSS-RISCV (Micro-ARchitectural System Simulator - RISCV) is a open source, cycle-accurate single core full-system (Linux) micro-architectural simulator for the RISC-V ISA built upon TinyEMU emulator (https://bellard.org/tinyemu) by Fabrice Bellard and uses its code for all the device emulation and configuration. It consists of detailed cycle accurate models of a modern RISC-V In-order and Out-of-order processor with branch prediction unit and a complete memory hierarchy. It is currently being developed and maintained by CAPS (Computer Architecture and Power Aware Systems Research Group) at the State University of New York at Binghamton. Being a true full system simulator, MARSS-RISCV can simulate all of the system in a cycle accurate fashion including OS code, libraries, interrupt handlers etc.
+MARSS-RISCV (Micro-ARchitectural System Simulator - RISCV) is a open source, cycle-accurate single core full-system (Linux) micro-architectural simulator for the RISC-V ISA built upon TinyEMU emulator (https://bellard.org/tinyemu) by Fabrice Bellard and uses its code for all the device emulation and configuration. It consists of detailed cycle accurate models of a modern RISC-V In-order and Out-of-order processor with branch prediction unit and a complete memory hierarchy including TLBs, caches and DRAM. It comes integrated with DRAMSim2 (https://github.com/umd-memsys/DRAMSim2), a cycle accurate memory system simulator. It is currently being developed and maintained by CAPS (Computer Architecture and Power Aware Systems Research Group) at the State University of New York at Binghamton. Being a true full system simulator, MARSS-RISCV can simulate all of the system in a cycle accurate fashion including OS code, libraries, interrupt handlers etc.
 
 .. note::
    Currently, our simulator is in alpha status as we are validating the cycle accuracy using various development boards. The simulated in-order core is tested and operational, however, the simulated out-of-order core is in microarchitectural testing phase.
@@ -33,7 +33,7 @@ Main Features
 
    a. 2-level cache hierarchy with various allocation and miss handling policies
 
-   b. Simple DIMM based DRAM model simulating row-buffer hits and misses
+   b. Choose from 2 DRAM memory models: Simple DIMM based basic DRAM model that simulates row-buffer (open-page) hits and DRAMSim2
 
 4. **Configurable branch prediction unit**
 

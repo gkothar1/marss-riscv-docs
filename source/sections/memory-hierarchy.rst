@@ -5,7 +5,7 @@ Memory Hierarchy
 This section briefly explains the memory access hierarchy of MARSS-RISCV.
 
 Overview
---------
+========
 Any memory access generated for instruction and data, follows the path: **TLB >> MMU >> Caches >> Memory controller >> DRAM**
 
 .. figure:: ../figures/memory-hy.*
@@ -15,7 +15,7 @@ Any memory access generated for instruction and data, follows the path: **TLB >>
    Memory Hierarchy Overview
 
 Memory Management Unit (MMU)
-----------------------------
+============================
 High-level overview of activities performed by MMU:
 
 * Performs TLB lookup in single cycle using the CPU issued virtual address, to get the corresponding physical address
@@ -30,7 +30,7 @@ High-level overview of activities performed by MMU:
    During page table walk, DRAM accesses generated to read/write PTEs are routed through L1 data cache if present.
 
 Cache Hierarchy
----------------
+===============
 
 * Set-associative virtually indexed and physically tagged caches
 
@@ -53,9 +53,12 @@ Cache Hierarchy
 .. note::
    Caches are only used for simulating cache access latency and do not store actual data.
 
-DRAM Organization
------------------
+Basic DRAM Model
+=================
+MARSS-RISCV comes with 2 DRAM memory models: **Basic** and **DRAMSim2**. This section describes in detail the base DRAM model and its memory latency calculation. For DRAMSim2, details can be found here: https://github.com/umd-memsys/DRAMSim2
 
+Organization
+------------
 * Simple DRAM model **simulating row buffer hits and misses** with configuration (``src/riscvsim/dram.h``):
 
    * ``DIMM``: 1

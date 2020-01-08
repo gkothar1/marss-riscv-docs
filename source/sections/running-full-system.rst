@@ -3,7 +3,7 @@ Simulating Benchmarks
 =====================
 This section describes in detail how to configure the simulator as per the desired configuration and simulate benchmarks in full system mode. 
 
-For this tutorial, we shall be configuring MARSS-RISCV to simulate a simple 5-stage 32-bit in-order RISC-V processor and run `CoreMark <https://github.com/eembc/coremark>`_, an industry-standard benchmark that measures the performance of central processing units (CPU) and embedded microcrontrollers (MCU).
+For this tutorial, we shall be configuring MARSS-RISCV to simulate a simple 5-stage 32-bit in-order RISC-V processor with basic DRAM model and run `CoreMark <https://github.com/eembc/coremark>`_, an industry-standard benchmark that measures the performance of central processing units (CPU) and embedded microcrontrollers (MCU).
 
 System Requirements and Dependencies
 ====================================
@@ -42,6 +42,7 @@ Then, ``cd`` into the simulator source directory:
 .. code-block:: console
 
 	$ cd $MARSS_RISCV_TOP/marss-riscv/src/
+	$ git submodule update --init --recursive
 
 Modify ``CONFIG_XLEN`` and ``CONFIG_FLEN`` options in the Makefile. Set ``CONFIG_XLEN`` to ``32`` and ``CONFIG_FLEN`` to ``64``. Then, compile the simulator using:
 
@@ -133,7 +134,7 @@ Simulation parameters can be configured using ``riscvemu.cfg``, located in ``$MA
 * 32KB 8-way L1-instruction and L1-data write-back caches with 1 cycle probe delay and LRU eviction
 * 2MB 16-way L2-shared write-back cache with 2 cycle probe delay and LRU eviction
 * 32-byte cache line size
-* 1024MB DRAM with tCL-tRCD-tRP (17-17-17) cycles respectively
+* 1024MB DRAM with basic DRAM model with tCL-tRCD-tRP (17-17-17) cycles respectively
 
 Based on the above configuration, the ``riscvemu.cfg`` will look like below. You can modify your copy of ``riscvemu.cfg`` accordingly or just paste the contents below in your copy.
 
@@ -212,6 +213,11 @@ Based on the above configuration, the ``riscvemu.cfg`` will look like below. You
 		tRP: 17,					/* Number of CPU cycles required between issuing the precharge command and opening the next row */
 		row_buffer_write_latency: 17,		/* Number of CPU cycles required to write the data in the already active row */
 
+		/** DRAMSim2 Parameters **/
+		dramsim_ini_file: "DRAMSim2/ini/DDR2_micron_16M_8b_x8_sg3E.ini", /* Path to DRAMSim2 ini file */
+		dramsim_system_ini_file: "DRAMSim2/system.ini.example",          /* Path to DRAMSim2 system ini file */
+		dramsim_stats_dir: ".",					         /* Path to directory to store DRAMSim2 stats */
+
 		/** Cache Parameters **/
 		enable_l1_caches: "true",               /* Enable L1 caches: true, false */
 
@@ -247,12 +253,12 @@ Based on the above configuration, the ``riscvemu.cfg`` will look like below. You
 Run the simulator
 =================
 
-By default, the simulator will boot in "snapshot" mode, meaning it will **not** retain the file system changes after it is shut down. In order to persist the changes, pass ``-rw`` command line argument to the simulator. By default, guest boots in emulation mode. To start in simulation mode run with ``-simstart`` command line option. But for now, we will let it start in emulation mode and switch into simulation mode just before running the benchmark.
+By default, the simulator will boot in "snapshot" mode, meaning it will **not** retain the file system changes after it is shut down. In order to persist the changes, pass ``-rw`` command line argument to the simulator. To specify which memory model to use, run MARSS-RISCV with command line option ``-mem-model`` and specify either ``base`` or ``dramsim2``. For DRAMSim2, the paths to ``ini`` and ``system ini file`` can be specified in ``riscvemu.cfg`` file. By default, guest boots in emulation mode. To start in simulation mode run with ``-simstart`` command line option. But for now, we will let it start in emulation mode and switch into simulation mode just before running the benchmark.
 
 .. code-block:: console
 
 	$ cd $MARSS_RISCV_TOP/marss-riscv/src
-	$ ./marss-riscv -rw -ctrlc $MARSS_RISCV_TOP/marss-riscv-images/riscv32-unknown-linux-gnu/riscvemu.cfg
+	$ ./marss-riscv -rw -ctrlc -mem-model base $MARSS_RISCV_TOP/marss-riscv-images/riscv32-unknown-linux-gnu/riscvemu.cfg
 
 Once the guest boots, we need to initialize the environment. Normally, this should happen automatically but due to an unresolved bug it needs to done explicitly. So, once you have access to the guest machine terminal, type:
 
