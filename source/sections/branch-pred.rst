@@ -14,7 +14,11 @@ Branch Target Buffer (BTB) is modeled as a set-associative data structure. Suppo
 eviction policies are random eviction and LRU using hot-cold bits.
 
 .. note::
-   For a simple bi-modal predictor, we keep the prediction bits as a part of BTB entry itself, rather than keeping them in a separate Branch History Table (BHT).
+   For a simple bi-modal predictor, we keep the prediction bits in a separate Branch History Table (BHT).
+
+Return Address Stack
+--------------------
+BPU consists of an optional return address stack (RAS) which keeps track of last ``N`` function return addresses, where ``N`` is the number of entries in RAS. Return address is pushed onto RAS from decode pipeline stage, if the decoded instruction turns out to be a function call. Similarly, if the decoded instruction turns out to be a function return, address is popped from RAS and forwarded to fetch stage.
 
 Two-Level Adaptive Predictor
 ----------------------------

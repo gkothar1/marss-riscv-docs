@@ -13,7 +13,7 @@ System requirements
 -------------------
 * 32-bit or 64-bit Linux machine
 * Libcurl, OpenSSL and SDL Libraries
-* Standard C compiler
+* Standard C and C++ compiler
 
 Installing the dependencies
 ---------------------------
@@ -33,18 +33,16 @@ First, clone the simulator repository:
 
 .. code-block:: console
 
-	$ export MARSS_RISCV_TOP=$(pwd)
-	$ cd $MARSS_RISCV_TOP
 	$ git clone https://github.com/bucaps/marss-riscv
 
 Then, ``cd`` into the simulator source directory:
 
 .. code-block:: console
 
-	$ cd $MARSS_RISCV_TOP/marss-riscv/src/
+	$ cd marss-riscv/src/
 	$ git submodule update --init --recursive
 
-Modify ``CONFIG_XLEN`` and ``CONFIG_FLEN`` options in the Makefile. Set ``CONFIG_XLEN`` to ``32`` and ``CONFIG_FLEN`` to ``64``. Then, compile the simulator using:
+Open Makefile and set ``CONFIG_XLEN`` to ``32``. Then, compile the simulator using:
 
 .. code-block:: console
 
@@ -53,18 +51,19 @@ Modify ``CONFIG_XLEN`` and ``CONFIG_FLEN`` options in the Makefile. Set ``CONFIG
 Preparing the bootloader, kernel and user-land image
 ===================================================
 
-Using pre-built bootloader, kernel and user-land images is the easiest way to start. The pre-built images are located in the `marss-riscv-images <https://github.com/bucaps/marss-riscv-images>`_ repository. To clone it, make sure you have `Git LFS <https://git-lfs.github.com/>`_ installed on your system, and type:
+Using pre-built bootloader, kernel and userland images is the easiest way to start. The pre-built 32-bit and 64-bit RISC-V images are available here: `marss-riscv-images
+<http://cs.binghamton.edu/~marss-riscv/marss-riscv-images.tar.gz>`_
 
 .. code-block:: console
 
-	$ cd $MARSS_RISCV_TOP
-	$ git clone https://github.com/bucaps/marss-riscv-images
+	$ wget http://cs.binghamton.edu/~marss-riscv/marss-riscv-images.tar.gz
+	$ tar -xvzf marss-riscv-images.tar.gz
 
 The user-land image needs to be decompressed first:
 
 .. code-block:: console
 
-	$ cd $MARSS_RISCV_TOP/marss-riscv-images/riscv32-unknown-linux-gnu/
+	$ cd marss-riscv-images/riscv32-unknown-linux-gnu/
 	$ xz -d -k -T 0 riscv32.img.xz
 
 Note that the file system on the disk image has almost no space. Hence we need to resize it to the desired size.
@@ -121,11 +120,12 @@ At this point, you should have a 32-bit RISC-V Linux image of size 8GB ready to 
 
 Configuring the Simulator
 =========================
-Simulation parameters can be configured using ``riscvemu.cfg``, located in ``$MARSS_RISCV_TOP/marss-riscv-images/riscv32-unknown-linux-gnu/``. We will now configure MARSS-RISCV to simulate a single core 32-bit RISC-V machine with the following configuration:
+Simulation parameters can be configured using ``config.cfg``, located in ``marss-riscv-images`` folder. We will now configure MARSS-RISCV to simulate a single core 32-bit RISC-V machine with the following configuration:
 
 * 32 bit in-order core with 5-stage pipeline
 * 32-entry instruction and data TLB
-* 32-entry 2-way branch target buffer with a simple bimodal predictor
+* 32-entry 2-way branch target buffer with a simple bimodal predictor, with 256-entry history table
+* 4-entry return address stack
 * single stage integer ALU with 1 cycle delay
 * 2-stage pipelined integer multiplier with 2 cycle delay per stage
 * single stage integer divider with 8 cycles delay
@@ -136,7 +136,7 @@ Simulation parameters can be configured using ``riscvemu.cfg``, located in ``$MA
 * 32-byte cache line size
 * 1024MB DRAM with basic DRAM model with tCL-tRCD-tRP (17-17-17) cycles respectively
 
-Based on the above configuration, the ``riscvemu.cfg`` will look like below. You can modify your copy of ``riscvemu.cfg`` accordingly or just paste the contents below in your copy.
+Based on the above configuration, the ``config.cfg`` will look like below. You can modify your copy of ``config.cfg`` accordingly or just paste the contents below in your copy.
 
 .. code-block:: json
 
@@ -144,11 +144,14 @@ Based on the above configuration, the ``riscvemu.cfg`` will look like below. You
 	{
 		version: 1,
 		machine: "riscv32",
-		bios: "bbl32.bin",
+		memory_size: 1024,                       /* Use riscv32 for 32-bit */
+		bios: "riscv32-unknown-linux-gnu/bbl32.bin",
+		kernel: "riscv32-unknown-linux-gnu/kernel-riscv32.bin",
 		cmdline: "console=hvc0 root=/dev/vda rw",
-		drive0: { file: "riscv32.img" },
+		drive0: { file: "riscv32-unknown-linux-gnu/riscv32.img" },
 		eth0: { driver: "user" },
 
+		/* MARSS-RISCV config options */
 		core_name: "test-riscv-core",           /* Name of the simulated RISC-V CPU */
 		core_type: "incore",                    /* Core type: In-order (incore) or Out-of-order(oocore) */
 
@@ -156,23 +159,15 @@ Based on the above configuration, the ``riscvemu.cfg`` will look like below. You
 		num_cpu_stages: 5,                      /* Number of pipeline stages: 5, 6 */
 
 		/** Out-of-order core parameters **/
-		prf_int_size: 64,                      /* Number of integer physical registers */
-		prf_fp_size: 64,                       /* Number of floating-point physical registers */
-		iq_int_size: 16,                       /* Number of integer issue-queue entries */
-		iq_fp_size: 16,                        /* Number of floating-point issue-queue entries */
-		iq_mem_size: 16,                       /* Number of memory issue-queue entries */
-		iq_int_issue_ports: 3,		       /* Number of issue ports on integer issue-queue */
-		iq_fp_issue_ports: 2,		       /* Number of issue ports on floating-point issue-queue */
-		iq_mem_issue_ports: 2,		       /* Number of issue ports on memory issue-queue */	
-		prf_int_write_ports: 3,                /* Number owrite ports to integer PRF */ 
-		prf_fp_write_ports: 2,                 /* Number of write ports to floating-point PRF */ 
-		rob_size: 64,                          /* Number of ROB entries */
-		rob_commit_ports:4,		       /* Number of ROB commit ports */
-		lsq_size: 16,                          /* Number of LSQ entries */ 
+		iq_size: 16,                            /* Number of integer issue-queue entries */
+		iq_issue_ports: 3,                      /* Number of issue ports on integer issue-queue */
+		rob_size: 64,                           /* Number of ROB entries */
+		rob_commit_ports:4,                     /* Number of ROB commit ports */
+		lsq_size: 16,                           /* Number of LSQ entries */ 
 
 		/** Tracing and Logging Parameters **/
 		sim_stats_path: ".",         	        /* Path to the directory to save simulation stats, NOTE: Absolute path is needed and no `/` is required at the end of the directory path. */
-		sim_trace_file: "simtrace.txt",         /* Path to the file to save commit trace, must compile MARSS-RISCV with CONFIG_SIM_TRACE CFLAG */
+		sim_trace_file: "simtrace.txt",         /* Path to the file to save commit trace */
 
 		/** Execution Unit Parameters **/
 		num_alu_stages: 1,                      /* Number of stages for integer ALU unit */
@@ -192,56 +187,59 @@ Based on the above configuration, the ``riscvemu.cfg`` will look like below. You
 
 		/** BPU Parameters **/
 		enable_bpu: "true",                     /* Enable branch prediction unit: true, false */
-		btb_size: 32,                          /* Number of entries in BTB, must be power of 2 */
+		btb_size: 32,                           /* Number of entries in BTB, must be power of 2 */
 		btb_ways: 2,                            /* Number of BTB ways */
+		bht_size: 256,                          /* Number of entries in BHT, must be power of 2 */
 		btb_eviction_policy: "lru",             /* Eviction policy for BTB: lru, random */
-		bpu_type: "bimodal",                   /* Type of predictor: bimodal, adaptive */
+		bpu_type: "bimodal",                    /* Type of predictor: bimodal, adaptive */
 		bpu_ght_size: 1,                        /* Number of entries in Global history table, must be power of 2 */
 		bpu_pht_size: 1,                        /* Number of entries in Pattern history table, must be power of 2 */
 		bpu_history_bits: 2,                    /* Number of bits in history register */
 		bpu_aliasing_func_type: "xor",          /* Aliasing function for adaptive predictor: and, xor, none
-	                                                   This can be used to construct Gshare(xor) and Gselect(and) predictors
-	                                                   when bpu_ght_size and bpu_pht_size are set to 1 */
+		                                               This can be used to construct Gshare(xor) and Gselect(and) predictors
+		                                               when bpu_ght_size and bpu_pht_size are set to 1 */
+		ras_size: 4,                            /* Number of entries in Return address stack, 0 means RAS is disabled */
 
 		/** DRAM Parameters **/
 		tlb_size: 32,                           /* Number of entries in instruction TLB, load TLB and store TLB */
-		memory_size: 1024,                      /* Size of DRAM in MB */
 		dram_burst_size: 32,                    /* DRAM burst size in bytes (Cache line size if caches are enabled) */
-		mem_bus_access_rtt_latency: 0,		/* Round trip delay of memory bus in CPU cycles */
-		tCL: 17,					/* Number of CPU cycles to read the data from a active DRAM row and drive it on the memory bus */
-		tRCD: 17,				/* Number of CPU cycles required between opening a row of memory and accessing columns within it */
-		tRP: 17,					/* Number of CPU cycles required between issuing the precharge command and opening the next row */
-		row_buffer_write_latency: 17,		/* Number of CPU cycles required to write the data in the already active row */
+		mem_bus_access_rtt_latency: 0,          /* Round trip delay of memory bus in CPU cycles */
+		tCL: 17,                                 /* Number of CPU cycles to read the data from a active DRAM row and drive it on the memory bus */
+		tRCD: 17,                                /* Number of CPU cycles required between opening a row of memory and accessing columns within it */
+		tRP: 17,                                 /* Number of CPU cycles required between issuing the precharge command and opening the next row */
+		row_buffer_write_latency: 17,            /* Number of CPU cycles required to write the data in the already active row */
 
 		/** DRAMSim2 Parameters **/
 		dramsim_ini_file: "DRAMSim2/ini/DDR2_micron_16M_8b_x8_sg3E.ini", /* Path to DRAMSim2 ini file */
 		dramsim_system_ini_file: "DRAMSim2/system.ini.example",          /* Path to DRAMSim2 system ini file */
-		dramsim_stats_dir: ".",					         /* Path to directory to store DRAMSim2 stats */
+		dramsim_stats_dir: ".",                                          /* Path to directory to store DRAMSim2 stats */
 
 		/** Cache Parameters **/
 		enable_l1_caches: "true",               /* Enable L1 caches: true, false */
 
 		icache: {
-			size: 32,                       /* Size of icache in KB */
-			ways: 8,                        /* Number of ways in icache */
-			probe_latency: 1,               /* Probe latency for icache in CPU cycles */
-			eviction: "lru",             /* Eviction policy for icache: lru, random */
+			size: 32,                         /* Size of icache in KB */
+			ways: 8,                          /* Number of ways in icache */
+			read_latency: 1,                  /* Probe latency for icache in CPU cycles */
+			eviction: "lru",                  /* Eviction policy for icache: lru, random */
 		},
 
 		dcache: {
-			size: 32,                       /* Size of dcache in KB */
-			ways: 8,                        /* Number of ways in dcache */
-			probe_latency: 1,               /* Probe latency for dcache in CPU cycles */
-			eviction: "lru",             /* Eviction policy for dcache: lru, random */
+			size: 32,                        /* Size of dcache in KB */
+			ways: 8,                         /* Number of ways in dcache */
+			read_latency: 1,                 /* Read latency for dcache in CPU cycles */
+			write_latency: 1,                /* Write latency for dcache in CPU cycles */
+			eviction: "lru",                 /* Eviction policy for dcache: lru, random */
 		},
 
-		enable_l2_cache: "true",               /* Enable l2_shared_cache: true, false */
+		enable_l2_cache: "true",             /* Enable l2_shared_cache: true, false */
 
 		l2_shared_cache: {
 			size: 2048,                      /* Size of l2_shared_cache in KB */
 			ways: 16,                        /* Number of ways in l2_shared_cache */
-			probe_latency: 2,               /* Probe latency for l2_shared_cache in CPU cycles */
-			eviction: "lru",             /* Eviction policy for l2_shared_cache: lru, random */
+			read_latency: 2,                /* Read latency for l2_shared_cache in CPU cycles */
+			write_latency: 2,               /* Write latency for l2_shared_cache in CPU cycles */
+			eviction: "lru",                /* Eviction policy for l2_shared_cache: lru, random */
 		},
 
 		cache_allocate_on_write_miss: "true",   /* Allocate entry in cache on write miss: true, false  */
@@ -253,12 +251,11 @@ Based on the above configuration, the ``riscvemu.cfg`` will look like below. You
 Run the simulator
 =================
 
-By default, the simulator will boot in "snapshot" mode, meaning it will **not** retain the file system changes after it is shut down. In order to persist the changes, pass ``-rw`` command line argument to the simulator. To specify which memory model to use, run MARSS-RISCV with command line option ``-mem-model`` and specify either ``base`` or ``dramsim2``. For DRAMSim2, the paths to ``ini`` and ``system ini file`` can be specified in ``riscvemu.cfg`` file. By default, guest boots in emulation mode. To start in simulation mode run with ``-simstart`` command line option. But for now, we will let it start in emulation mode and switch into simulation mode just before running the benchmark.
+By default, the simulator will boot in "snapshot" mode, meaning it will **not** retain the file system changes after it is shut down. In order to persist the changes, pass ``-rw`` command line argument to the simulator. To specify which memory model to use, run MARSS-RISCV with command line option ``-mem-model`` and specify either ``base`` or ``dramsim2``. For DRAMSim2, the paths to ``ini`` and ``system ini file`` can be specified in ``config.cfg`` file. By default, guest boots in emulation mode. To start in simulation mode run with ``-simstart`` command line option. But for now, we will let it start in emulation mode and switch into simulation mode just before running the benchmark. Now change again into ``marss-riscv/src`` directory and type:
 
 .. code-block:: console
 
-	$ cd $MARSS_RISCV_TOP/marss-riscv/src
-	$ ./marss-riscv -rw -ctrlc -mem-model base $MARSS_RISCV_TOP/marss-riscv-images/riscv32-unknown-linux-gnu/riscvemu.cfg
+	$ ./marss-riscv -rw -ctrlc -mem-model base marss-riscv-images/config.cfg
 
 Once the guest boots, we need to initialize the environment. Normally, this should happen automatically but due to an unresolved bug it needs to done explicitly. So, once you have access to the guest machine terminal, type:
 
@@ -267,7 +264,7 @@ Once the guest boots, we need to initialize the environment. Normally, this shou
 	$ export PYTHONPATH=/usr/lib64/python2.7/site-packages/
 	$ env-update
 
-The system is ready for use. It has a working GCC compiler, ssh, git and `more <https://github.com/bucaps/marss-riscv-images/blob/master/riscv32-unknown-linux-gnu/PACKAGES>`_.
+The system is ready for use. It has a working GCC compiler, ssh, git and more.
 
 Load the benchmark and the simulation utility programs inside the guest VM
 ==========================================================================

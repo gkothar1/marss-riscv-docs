@@ -42,7 +42,7 @@ required FU is available.
 
 Execute
 -----------------------------
-Execution unit consists of Int-ALU, Int-MUL, Int-DIV, FPU-ALU and FPU-FMA. All the execution units can be configured to run in a pipelined fashion, wherein the latency (in CPU cycles) of each pipelined stage for an execution unit can be configured separately. All the execution units have dedicated data forwarding bus. Last stage for an execution unit puts data on the forwarding bus on which data **remains valid exactly for one cycle**.
+Execution unit consists of Int-ALU, Int-MUL, Int-DIV, FPU-ALU and FPU-FMA. All the execution units can be configured to run in a pipelined fashion, where the latency (in CPU cycles) of each pipelined stage for an execution unit can be configured separately. All the execution units have dedicated data forwarding bus. Last stage for an execution unit puts data on the forwarding bus on which data **remains valid exactly for one cycle**.
 
 .. note::
    Integer ALU performs memory address calculation for loads, stores, atomic instructions, branch target calculation and branch condition evaluation.
@@ -54,7 +54,7 @@ and also generate DRAM accesses if required (*e.g. TLB miss, LLC miss, victim
 eviction*). Data read by loads and atomic instructions is pushed on the forwarding bus for this stage, which **remains valid exactly for one cycle**.
 For branches, branch prediction structures are updated and the target address is forwarded to pcgen, followed by flushing of preceding stages on misprediction.
 Stage stalls until the look-up latency is simulated and all generated DRAM
-accesses are completed. 
+accesses are completed. Non-memory instructions on passing through memory stage can push their results which were calculated during execution on the forwarding bus of the memory stage, to be read by waiting instructions in decode stage.
 
 .. note::
    On a TLB miss, DRAM accesses required to read/write page table entries are simulated. Page-fault exception is raised, if page table entry is invalid.
