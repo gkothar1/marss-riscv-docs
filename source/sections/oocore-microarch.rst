@@ -1,8 +1,7 @@
 ===================================
 Out-of-Order Core Microarchitecture
 ===================================
-
-MARSS-RISCV includes a highly configurable cycle accurate model of an out-of-order scalar core. It can be configured to simulate both 32-bit and 64-bit versions of RISC-V instruction set. The simulated design does not have distinct physical register files, but the **re-order buffer slots are used as physical registers**.
+MARSS-RISCV includes a highly configurable cycle-accurate model of a generic pipelined out-of-order scalar core. The simulated design does not have separate physical register files. However, it uses the re-order buffer (ROB) slots as the physical registers and separate rename tables for integer and floating-point data. The simulated out-of-order core has seven generic stages: fetch, decode, rename/dispatch, issue, execute, memory, commit. Speculative execution is supported, and instructions are executed on a speculated path as long as required resources are available for dispatch. Figure 2 shows a high-level overview of the simulated out of order core model.
 
 .. figure:: ../figures/oopipeline.*
    :figwidth: 740 px
@@ -17,63 +16,58 @@ The simulated out-of-order core has the 7 generic pipeline stages: **fetch**, **
 
 Fetch
 --------------------------
-Fetch stage probes the code TLB, BPU and instruction cache in parallel. On BPU hit, the predicted address is set as the next fetch PC. TLB and cache probe functions return latency for cache and TLB lookup and generate DRAM accesses if required (*e.g. TLB miss, LLC miss, victim
-eviction*). Stage stalls until the look-up latency is simulated and all generated DRAM
-accesses are completed. 
+Fetch stage probes the instruction TLB, BPU, and instruction cache in parallel using the address provided by the pcgen stage. On BPU hit, the predicted address is sent to the pcgen unit. Fetch stage will stall until the latency for cache-lookup and memory access (if required) is simulated. 
 
 .. note::
-   On a TLB miss, DRAM accesses required to read/write page table entries are simulated. Page-fault exception is raised, if page table entry is invalid.
+   Memory access latency can include latency for reading the cache line containing instruction and reading/writing page table entries on a TLB miss.
 
 Decode
 ---------------------------
-Decode stages decodes the instruction and if illegal, raises an exception. Entries in the branch predictor structures are created for branches if not present.
+Decode stage decodes the instruction and, if illegal, raises an exception.
+Entries in the branch predictor structures are created for branches if not
+present. The return address is pushed onto RAS if a function call is detected.
 
 .. note::
    For simplicity, SYSTEM major opcode instructions (*csr{r/w}, ecall, sret etc.*) are executed in a **single cycle** due to their complex logic. For this purpose, TinyEMU complex opcode helper functions are used.
 
 Dispatch
 -----------------------------
-Dispatch stage performs register renaming and allocates the required entries in IQ, LSQ and ROB. 
-The stage stalls if the any of the required resources are not available. Valid operands are read from the architectural register file.
+The dispatch stage performs register renaming and allocates the required entries in IQ, LSQ, and ROB. The stage stalls if any of the required resources are not available. Valid operands are read from the architectural register file.
 
 Issue
 ---------------------
-In Issue stage, remaining operands are read from the indicated ROB slot if they are avaliable or from the architectural register file. The stage stalls if the any of the required resources are not available. There is a single global issue queue for all the instructions, in which the entries are checked sequentially every cycle for issuing.
+There is a single global issue queue (IQ) for all the instructions, in which the entries are checked sequentially every cycle for issuing to one of the five execution units.  When an IQ entry is processed, remaining operands are read from the designated ROB slot if they are ready. IQ entry is issued once all the operands are available, and the target execution unit is vacant.
 
 Execute
 ---------------------------
-Execution unit consists of Int-ALU, Int-MUL, Int-DIV, FPU-ALU and FPU-FMA. All the execution units can be configured to run in a pipelined fashion, where the latency (in CPU cycles) of each pipelined stage for an execution unit can be configured separately. Last stage for an execution unit writes the result produced in the corresponding ROB entry and marks it as ready to commit. 
+The execution pipeline stage is sub-divided into five distinct functional units. They are Integer ALU, Integer Multiplier, Integer Divider, Floating-Point ALU, and Floating-Point Fused-Multiply-Add unit. Integer ALU and FPU ALU are strictly non-pipelined, whereas the rest can be configured to run iteratively or in a pipelined fashion. In out of order core design, all of these five functional units strictly operate in parallel. After simulating the execution latency, the FU writes the result produced in the corresponding ROB entry and marks it as ready to commit.
 
 .. note::
-      Integer ALU performs memory address calculation for loads, stores, atomic instructions, branch target calculation and branch condition evaluation.
+      Integer ALU performs memory address calculation for loads, stores, atomic instructions, branch target calculation, and branch condition evaluation.
 
 Memory
-------
-All the data memory accesses are performed by the Load Store Unit (also know as the memory stage) through the Load Store Queue (LSQ). 
-For loads, stores and atomic operations, LSU probes the TLB and data cache in parallel. 
-TLB and cache probe functions return latency for cache and TLB lookup and also generate DRAM accesses if required 
-(e.g. TLB miss, LLC miss, victim eviction). 
-LSU stalls until the look-up latency is simulated and all generated DRAM accesses are completed. Data read by loads and atomic instructions is written in the corresponding ROB entry and is marked ready to commit.
+--------
+A single unified load-store queue (LSQ) handles all the memory traffic of loads, stores, and atomic instructions in the program sequence from where they are issued to (load-store unit) LSU from the head of LSQ. Though loads are speculatively issued, stores and atomics are issued to memory only if they reach ROB top. 
+
+LSU accepts a single memory request from the head of LSQ and probes the data TLB and data cache in parallel. The LSU will stall until the latency for cache-lookup and memory access (if required) is simulated. After simulating the delay, data read by load and atomic instruction is written to the corresponding ROB entry and is marked ready to commit.
 
 .. note::
-   Current version supports a simple unified LSQ design, in which loads and stores are processed sequentially, in program order.
-.. note::
-   On a TLB miss, DRAM accesses required to read/write page table entries are simulated. Page-fault exception is raised, if page table entry is invalid.
+   Memory access latency can include latency for reading the cache line containing data and reading/writing page table entries on a TLB miss.
 
 Commit
-------
-Retirement logic commits the instructions from the head of ROB and also updates the rename tables. Results are written to the architectural register file from the corresponding ROB entry. Number of commit ports on ROB can be configured.
+---------
+Retirement logic works asynchronously and commits the instructions from the head of Reorder buffer (ROB) when the entry is ready to commit. Results are written to the architectural register file from the corresponding ROB entry. The number of commit ports on ROB is configurable.
 
-Stage-wise activities based on instruction type
+Stage-wise activities based on the instruction type
 ===============================================
 
-This section describes stage by stage pipeline activities for various instruction types from moment they enter the pipeline 
-until they are committed.
+This section describes stage by stage pipeline activities for various instruction types from the instant they enter the pipeline 
+until they commit.
 
 Operate Instructions
 --------------------
 
-Consider the following operate instruction in logical format: **OPCODE RD, RS1, RS2**
+Consider the following operate instruction in the logical format: **OPCODE RD, RS1, RS2**
 
 * **Fetch**
 
@@ -89,7 +83,7 @@ Consider the following operate instruction in logical format: **OPCODE RD, RS1, 
 
    * Read the rename table to get the latest physical register mappings (or ROB indexes) for ``RS1`` and ``RS2``, say ``PRS1`` and ``PRS2`` respectively
 
-   * If the value of ``PRS1`` or ``PRS2`` is ``-1``, this indicates that ``RS1`` or ``RS2`` can be safely read from architectural register file
+   * If the value of ``PRS1`` or ``PRS2`` is ``-1``, this indicates that ``RS1`` or ``RS2`` can be safely read from the architectural register file
 
    * Update ``RD`` mapping in the rename table to ``PRD`` (or the ROB index of the current instruction), and save old mapping for the destination ``RD`` as ``PREV_PRD``
 
@@ -97,11 +91,11 @@ Consider the following operate instruction in logical format: **OPCODE RD, RS1, 
 
 * **Issue**
 
-   * If the value of ``PRS1`` or ``PRS2`` is not ``-1``, then the values of ``RS1`` or ``RS2`` are read from ROB slots ``PRS1`` or ``PRS2`` respectively, if they are ready
+   * If the value of ``PRS1`` or ``PRS2`` is not ``-1``, then the values of ``RS1`` or ``RS2`` are read from ROB slots ``PRS1`` or ``PRS2`` respectively if they are ready
 
-   * If the required execution unit is free, issue the instruction to appropriate execution unit and remove IQ entry
+   * If the required execution unit is free, issue the instruction to the appropriate execution unit and remove IQ entry
    
-   * Instruction is not issued until all the source operands are read and the required execution unit is available
+   * Instruction is not issued until all the source operands are read, and the required execution unit is available
 
 * **Execute**
 
@@ -109,9 +103,9 @@ Consider the following operate instruction in logical format: **OPCODE RD, RS1, 
 
 * **Commit**
 
-   * Once this instruction comes to ROB top and no exception has occurred and entry is ready to commit, write the results from ROB entry to the architectural register file
+   * Once this instruction comes to ROB top and no exception has occurred, and entry is ready to commit, write the results from ROB entry to the architectural register file
 
-   * Update the rename table mapping for ``RD`` to ``-1``, this indicates that ``RD`` can be now read directly from the architectural register file
+   * Update the rename table mapping for ``RD`` to ``-1``, which indicates that ``RD`` can now be read directly from the architectural register file
 
    * Deallocate the ROB entry
 
@@ -119,7 +113,7 @@ Consider the following operate instruction in logical format: **OPCODE RD, RS1, 
 Loads
 -----
 
-Consider the following load instruction in logical format: **LOAD RD, RS1, IMM**
+Consider the following load instruction in the logical format: **LOAD RD, RS1, IMM**
 
 * **Fetch**
 
@@ -135,7 +129,7 @@ Consider the following load instruction in logical format: **LOAD RD, RS1, IMM**
 
    * Read the rename table to get the latest physical register mappings (or ROB indexes) for ``RS1``, say ``PRS1``
 
-   * If the value of ``PRS1`` is ``-1``, this indicates that ``RS1`` can be safely read from architectural register file
+   * If the value of ``PRS1`` is ``-1``, this indicates that ``RS1`` can be safely read from the architectural register file
 
    * Update ``RD`` mapping in the rename table to ``PRD`` (or the ROB index of the current instruction), and save old mapping for the destination ``RD`` as ``PREV_PRD``
 
@@ -147,11 +141,11 @@ Consider the following load instruction in logical format: **LOAD RD, RS1, IMM**
 
    * If the ``Int-ALU`` is free, issue the instruction to ``Int-ALU`` and remove IQ entry
    
-   * Instruction is not issued until all the source operands are read and the ``Int-ALU`` is available
+   * Instruction is not issued until all the source operands are read, and the ``Int-ALU`` is available
 
 * **Execute**
 
-   * Calculate the memory address and write it to the LSQ entry and the LSQ entry is marked as valid
+   * Calculate the memory address, write it to the LSQ entry and mark it as ready
 
 * **Memory**
 
@@ -161,16 +155,16 @@ Consider the following load instruction in logical format: **LOAD RD, RS1, IMM**
 
 * **Commit**
 
-   * Once this instruction comes to ROB top and no exception has occurred and entry is ready to commit, write the results from ROB entry to the architectural register file
+   * Once this instruction comes to ROB top and no exception has occurred, and entry is ready to commit, write the results from ROB entry to the architectural register file
 
-   * Update the rename table mapping for ``RD`` to ``-1``, this indicates that ``RD`` can be now read directly from the architectural register file
+   * Update the rename table mapping for ``RD`` to ``-1``, which indicates that ``RD`` can now be read directly from the architectural register file
 
    * Deallocate the ROB entry
 
 Stores
 ------
 
-Consider the following store instruction in logical format: **STORE RS1, RS2, IMM**
+Consider the following store instruction in the logical format: **STORE RS1, RS2, IMM**
 
 * **Fetch**
 
@@ -186,21 +180,21 @@ Consider the following store instruction in logical format: **STORE RS1, RS2, IM
 
    * Read the rename table to get the latest physical register mappings (or ROB indexes) for ``RS1`` and ``RS2``, say ``PRS1`` and ``PRS2`` respectively
 
-   * If the value of ``PRS1`` or ``PRS2`` is ``-1``, this indicates that ``RS1`` or ``RS2`` can be safely read from architectural register file
+   * If the value of ``PRS1`` or ``PRS2`` is ``-1``, this indicates that ``RS1`` or ``RS2`` can be safely read from the architectural register file
 
-   * After renaming, the instruction becomes: ``STORE PRS1, PRS2, IMM``
+   * After renaming, the instruction becomes ``STORE PRS1, PRS2, IMM``
 
 * **Issue**
 
-   * If the value of ``PRS1`` or ``PRS2`` is not ``-1``, then the values of ``RS1`` or ``RS2`` are read from ROB slots ``PRS1`` or ``PRS2`` respectively, if they are ready
+   * If the value of ``PRS1`` or ``PRS2`` is not ``-1``, then the values of ``RS1`` or ``RS2`` are read from ROB slots ``PRS1`` or ``PRS2`` respectively if they are ready
 
    * If the ``Int-ALU`` is free, issue the instruction to ``Int-ALU`` and remove IQ entry
    
-   * Instruction is not issued until all the source operands are read and the ``Int-ALU`` is available
+   * Instruction is not issued until all the source operands are read, and the ``Int-ALU`` is available
 
 * **Execute**
 
-   * Calculate the memory address and write it to the LSQ entry and the LSQ entry is marked as valid
+   * Calculate the memory address, write it to the LSQ entry, mark it as valid
 
 * **Commit**
 
@@ -209,13 +203,13 @@ Consider the following store instruction in logical format: **STORE RS1, RS2, IM
    * Deallocate the ROB and LSQ entry once the store completes its memory access
 
 Atomics
--------
-Atomic instructions are handled similar to the store instructions. They are dispatched only when all the prior instructions in the ROB have been committed (or only if the ROB is empty) and the memory access is initiated once the ROB entry for atomics reaches the head of the ROB.
+--------
+Atomic instructions are handled similarly to the store instructions are dispatched only when all the prior instructions in the ROB are committed (ROB is empty). The memory access initiates once the ROB entry for atomics reaches the head of the ROB and LSQ.
 
 Branches
 --------
 
-Consider the following branch instruction in logical format: **BRANCH RS1, RS2, IMM**
+Consider the following branch instruction in the logical format: **BRANCH RS1, RS2, IMM**
 
 * **Fetch**
 
@@ -231,18 +225,18 @@ Consider the following branch instruction in logical format: **BRANCH RS1, RS2, 
 
    * Read the rename table to get the latest physical register mappings (or ROB indexes) for ``RS1`` and ``RS2``, say ``PRS1`` and ``PRS2`` respectively
 
-   * If the value of ``PRS1`` or ``PRS2`` is ``-1``, this indicates that ``RS1`` or ``RS2`` can be safely read from architectural register file
+   * If the value of ``PRS1`` or ``PRS2`` is ``-1``, this indicates that ``RS1`` or ``RS2`` can be safely read from the architectural register file
 
    * After renaming, the instruction becomes: ``BRANCH PRS1, PRS2, IMM``
 
 
 * **Issue**
 
-   * If the value of ``PRS1`` or ``PRS2`` is not ``-1``, then the values of ``RS1`` or ``RS2`` are read from ROB slots ``PRS1`` or ``PRS2`` respectively, if they are ready
+   * If the value of ``PRS1`` or ``PRS2`` is not ``-1``, then the values of ``RS1`` or ``RS2`` are read from ROB slots ``PRS1`` or ``PRS2`` respectively if they are ready
 
    * If the ``Int-ALU`` is free, issue the instruction to ``Int-ALU`` and remove IQ entry
    
-   * Instruction is not issued until all the source operands are read and the ``Int-ALU`` is available
+   * Instruction is not issued until all the source operands are read, and the ``Int-ALU`` is available
 
 * **Execute**
 
@@ -254,7 +248,7 @@ Consider the following branch instruction in logical format: **BRANCH RS1, RS2, 
 
       * Set the fetch PC to the target address
 
-      * Flush all the instructions from ROB, LSQ, LSU and IQ on the mis-speculated path, which were followed by this branch
+      * Flush all the instructions from ROB, LSQ, LSU, and IQ on the miss speculated path, followed by this branch
 
       * Revert all the rename table mappings, to the point of the dispatch of this branch instruction
 

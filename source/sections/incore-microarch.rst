@@ -2,7 +2,7 @@
 In-Order Core Microarchitecture
 ===============================
 
-MARSS-RISCV includes a highly configurable cycle accurate model of an in-order scalar core (*In-Order Issue and In-Order Write-back*) based on RISC-V Rocket Core. It can be configured to simulate both 32-bit and 64-bit versions of RISC-V instruction set with 5 and 6 stage pipeline configurations. The pipeline is shared by integer and floating-point instructions and uses data forwarding. 
+MARSS-RISCV includes a highly configurable cycle-accurate model of a generic pipelined in-order single-issue scalar core with a peak execution rate of one instruction per clock cycle. It can simulate both 32-bit and 64-bit versions of the RISC-V instruction set and is roughly based on RISC-V Rocket core. It consists of six pipeline stages: pcgen, fetch, decode, execute, memory, commit. For 5-stage pipeline configuration, pcgen and fetch unit operate as a single stage. The pipeline is shared by the integer and floating-point instructions and supports data forwarding. Figure 1 shows a high-level overview of the simulated in-order core model.  
 
 .. figure:: ../figures/pipeline.*
    :figwidth: 620 px
@@ -17,48 +17,45 @@ The simulated in-order core has the 6 generic pipeline stages: **pcgen**, **fetc
 
 PC Generation (pcgen)
 ----------------------
-By default, pcgen increments PC to point to the next instruction in the sequence. Branch resolution overrides the address in pcgen upon misprediction from memory stage. Branch target buffer (BTB) forwards the target address to pcgen for branches.
+By default, pcgen increments PC to point to the next instruction in the sequence. Branch resolution overrides the address in pcgen upon misprediction signal from memory stage. Branch target buffer (BTB) delivers the target address to pcgen for branches on a BPU hit.
 
 Fetch
 --------------------------
-Fetch stage probes the code TLB, BPU and instruction cache in parallel using the
-address provided by pcgen stage. On BPU hit, the predicted address is forwarded to pcgen unit. TLB and cache probe functions return latency for cache and TLB lookup and generate DRAM accesses if required (*e.g. TLB miss, LLC miss, victim
-eviction*). Stage stalls until the look-up latency is simulated and all generated DRAM
-accesses are completed. 
+Fetch stage probes the instruction TLB, BPU, and instruction cache in parallel using the address provided by the pcgen stage. On BPU hit, the predicted address is sent to the pcgen unit. Fetch stage will stall until the latency for cache-lookup and memory access (if required) is simulated. 
 
 .. note::
-   On a TLB miss, DRAM accesses required to read/write page table entries are simulated. Page-fault exception is raised, if page table entry is invalid.
+   Memory access latency can include latency for reading the cache line containing instruction and reading/writing page table entries on a TLB miss.
 
 Decode
 ---------------------------
-Decode stages decodes the instruction and if illegal, raises an exception.
+Decode stage decodes the instruction and, if illegal, raises an exception.
 Entries in the branch predictor structures are created for branches if not
-present. Operands are read from forwarding buses or the register files if
-valid. Stage stalls until all the data dependencies are satisfied and the
-required FU is available.
+present. The return address is pushed onto RAS if a function call is detected. Operands are read from forwarding buses or the register files if
+valid. Stage stalls until all the data dependencies (RAW and WAW) are satisfied, and the required FU is available. 
 
 .. note::
    For simplicity, SYSTEM major opcode instructions (*csr{r/w}, ecall, sret etc.*) are executed in a **single cycle** due to their complex logic. For this purpose, TinyEMU complex opcode helper functions are used.
 
 Execute
 -----------------------------
-Execution unit consists of Int-ALU, Int-MUL, Int-DIV, FPU-ALU and FPU-FMA. All the execution units can be configured to run in a pipelined fashion, where the latency (in CPU cycles) of each pipelined stage for an execution unit can be configured separately. All the execution units have dedicated data forwarding bus. Last stage for an execution unit puts data on the forwarding bus on which data **remains valid exactly for one cycle**.
+The execution pipeline stage is sub-divided into five distinct functional units. They are Integer ALU, Integer Multiplier, Integer Divider, Floating-Point ALU, and Floating-Point Fused-Multiply-Add unit. Integer ALU and FPU ALU are strictly non-pipelined, whereas the rest can be configured to run iteratively or in a pipelined fashion. All the execution units have dedicated data forwarding buses. After simulating the execution latency, the FU writes the result on the forwarding bus on which it **remains valid exactly for one cycle**. 
+
+All of these five functional units can be configured to run in parallel, meaning each of them has an instruction at the same time. In such a case, if multiple instructions have completed their execution simultaneously, the memory stage selects the earliest dispatched instruction from the execution units.
 
 .. note::
-   Integer ALU performs memory address calculation for loads, stores, atomic instructions, branch target calculation and branch condition evaluation.
+   Integer ALU performs memory address calculation for loads, stores, atomic instructions, branch target calculation, and branch condition evaluation.
 
 Memory
 ---------------------
-For loads, stores and atomic operations, memory stage probes the TLB and data cache in parallel. TLB and cache probe functions return latency for cache and TLB lookup
-and also generate DRAM accesses if required (*e.g. TLB miss, LLC miss, victim
-eviction*). Data read by loads and atomic instructions is pushed on the forwarding bus for this stage, which **remains valid exactly for one cycle**.
-For branches, branch prediction structures are updated and the target address is forwarded to pcgen, followed by flushing of preceding stages on misprediction.
-Stage stalls until the look-up latency is simulated and all generated DRAM
-accesses are completed. Non-memory instructions on passing through memory stage can push their results which were calculated during execution on the forwarding bus of the memory stage, to be read by waiting instructions in decode stage.
+Non-memory instructions (arithmetic and branches) pass through the memory stage in a single cycle and push their results, which were calculated during execution on the forwarding bus of the memory stage. 
+
+For loads, stores, and atomic operations, the memory stage probes the data TLB and data cache in parallel. The stage will stall until the latency for cache-lookup and memory access (if required) is simulated. After simulating the delay, data read by load and atomic instruction is written on the dedicated forwarding bus for the memory stage, which **remains valid exactly for one cycle**. 
+
+For branches, branch prediction structures are probed and updated, and the target address is forwarded to pcgen, followed by flushing of preceding stages on misprediction.
 
 .. note::
-   On a TLB miss, DRAM accesses required to read/write page table entries are simulated. Page-fault exception is raised, if page table entry is invalid.
+   Memory access latency can include latency for reading the cache line containing data and reading/writing page table entries on a TLB miss.
 
 Commit
 ---------------------------
-Writes to register files are performed in commit stage.
+The results are written to the register files (Int and FP) in the commit stage.

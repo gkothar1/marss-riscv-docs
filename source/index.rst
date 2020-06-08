@@ -3,9 +3,9 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-============================================================
-MARSS-RISCV: Micro-architectural System Simulator for RISC-V
-============================================================
+=============================================================================================================
+MARSS-RISCV: Full system cycle accurate micro-architectural research simulator for single-core RISC-V systems
+=============================================================================================================
 
    .. toctree::
       :maxdepth: 2
@@ -19,5 +19,4 @@ MARSS-RISCV: Micro-architectural System Simulator for RISC-V
       sections/branch-pred
       sections/memory-hierarchy
       sections/running-full-system
-      sections/future-work
       sections/bibliography/bibliography

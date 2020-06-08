@@ -1,139 +1,57 @@
-================
-Memory Hierarchy
-================
+==========================
+Simulation of memory access delay
+==========================
 
-This section briefly explains the memory access hierarchy of MARSS-RISCV.
+This section briefly describes the simulation of the memory access delay and the simulated components of the memory hierarchy. The memory hierarchy includes three main components:
 
-Overview
-========
-Any memory access generated for instruction and data, follows the path: **TLB >> MMU >> Caches >> Memory controller >> DRAM**
-
-.. figure:: ../figures/memory-hy.*
-   :figwidth: 620 px
-   :align: center
-
-   Memory Hierarchy Overview
-
-Memory Management Unit (MMU)
-============================
-High-level overview of activities performed by MMU:
-
-* Performs TLB lookup in single cycle using the CPU issued virtual address, to get the corresponding physical address
-
-* Does a hardware page table walk on a TLB miss and raises a page fault exception if page walk fails
-
-* If paging is disabled (no translation) or the CPU is running in machine mode, TLBs are by-passed, in such a case virtual address is same as the physical address
-
-* Sends the physical address to L1 caches
+1. Memory controller
+2. Translation look-aside buffers (TLB)
+3. Caches
 
 .. note::
-   During page table walk, DRAM accesses generated to read/write PTEs are routed through L1 data cache if present.
+   We do not model the actual data in the caches and memory controller for simplicity, but just the addresses for simulating the delays.
 
-Cache Hierarchy
-===============
-
-* Set-associative virtually indexed and physically tagged caches
-
-* Supports two levels
-
-   * Level 1: separate instruction and data cache
-
-   * Level 2: single shared cache (optional)
-
-* Policies for handling writes:
-
-   * Write-back (WB), Write-through (WT)
-
-* Policies for handling write miss:
-
-   * Write allocate (WA), Write no allocate (WNA)
-
-* Memory access requests are generated and sent to simulated DRAM on Last Level Cache (LLC) miss
-
-.. note::
-   Caches are only used for simulating cache access latency and do not store actual data.
-
-Basic DRAM Model
+Memory controller
 =================
-MARSS-RISCV comes with 2 DRAM memory models: **Basic** and **DRAMSim2**. This section describes in detail the base DRAM model and its memory latency calculation. For DRAMSim2, details can be found here: https://github.com/umd-memsys/DRAMSim2
+The memory controller includes a single FIFO queue known as ``mem_req_queue`` comprising all the pending memory access requests. Requests are processed sequentially, one at a time, from the head of ``mem_req_queue``. Every memory access request consists of:
 
-Organization
+1.  Starting physical address 
+2. Type of access: ``read``/``write``
+3. Access size (cache-line size)
+4. Pipeline stage which generated access: ``fetch``/``memory``
+5. A bit indicating whether this request is for a page table entry
+
+Memory access requests are added to ``mem_req_queue`` by cache lookup functions on a cache miss or by TLB lookup functions on a TLB miss (for modifying page table entries). 
+
+.. note::
+   We don't stall the CPU pipeline stage for the ``write`` requests to complete.  However, the delay for a ``write`` request is nevertheless simulated asynchronously through the memory controller.
+
+Base DRAM model
+-------------------
+When MARSS-RISCV is configured to run with the ``base`` DRAM model, requests are processed sequentially, from the head of ``mem_req_queue``. Processing solely involves simulating a fixed configurable latency in CPU cycles, known as ``mem_access_latency``. After simulating the latency, the stall on the waiting CPU pipeline stage is removed, and the current entry is dequeued from ``mem_req_queue``.  
+
+In ``base`` mode, the memory controller keeps track of the physical page number of the latest request processed. Any subsequent accesses to the same physical page occupies a lower delay, which is roughly 60 percent of the fixed ``mem_access_latency``.
+
+DRAMSIM2
 ------------
-* Simple DRAM model **simulating row buffer hits and misses** with configuration (``src/riscvsim/dram.h``):
+When ``dramsim2`` is enabled, requests are sent to DRAMSIM2 from the head of ``mem_req_queue``. When the callback from DRAMSIM2 is received, the stall on the waiting CPU pipeline stage is removed. The current entry is dequeued from ``mem_req_queue``.  
 
-   * ``DIMM``: 1
-   * ``Ranks``: 2
-   * ``Chips``: 8 per rank
-   * ``Bank``: 8 per chip
-   * ``Column size``: 8-bit
-   * ``Memory bus width``: 64-bit
+Translation look-aside buffers (TLB)
+====================================
+TinyEMU emulates a hardware memory management unit (MMU) that manages emulated guest memory and provides support for *sv32*,  *sv39*, and *sv48* paged virtual memory schemes.  It translates the virtual memory addresses issued by the emulated CPU to the correct physical memory locations in the host system using three distinct direct-mapped address translation buffers (or TLB) for code, loads, and stores. It checks the validity of the CPU issued memory addresses, performs page table walk in case of a TLB miss, and generates a page fault exception in the emulated CPU on a page miss in the emulated memory.
 
-* Physical address to DRAM mapping is as follows:
+MARSS-RISCV uses the MMU emulated by TinyEMU to fetch the instructions and data into the simulated CPU pipeline. TLB lookup and address translation on a TLB hit is modeled to complete in a **single cycle** and happens in parallel with the cache lookup. On a TLB miss, the simulator creates a memory request per page table entry containing the physical address of the entry and appends it to the memory controller queue.
 
-.. figure:: ../figures/dram-addr-map.*
-   :figwidth: 700 px
+Caches
+======
+Cache hierarchy model consists of two levels of physically indexed, physically tagged blocking caches. Level-1 caches include a separate instruction and data cache, whereas Level-2 consists of an optional unified cache. 
+
+The cache accesses are non-pipelined and follow a non-inclusive non-exclusive design, meaning the contents of the lower level cache are neither strictly inclusive nor exclusive of the higher-level cache.  L2 cache can be accessed in parallel by split L1 caches. 
+
+The size, associativity, read-hit latency, write-hit latency, line size, eviction policy (``random`` or ``pseudo-LRU``), write policy (``write-through`` or ``write-back``), and write-miss policy (``write-allocate`` or ``write-no-allocate``) is configurable. A miss in the last level cache (LLC) or eviction creates a memory request which is appended to the memory controller queue.
+
+.. figure:: ../figures/mem-hy.*
+   :figwidth: 500 px
    :align: center
 
-* DRAM access latencies in CPU cycles are calculated as follows (These parameters can be configured via simulator's JSON configuration file):
-
-   * Row buffer read hit: ``mem_bus_access_rtt + tCL``
-
-   * Row buffer read miss: ``mem_bus_access_rtt_latency + tRP + tRCD + tCL``
-
-   * Row buffer write hit: ``mem_bus_access_rtt_latency + row_buffer_write_latency``
-
-   * Row buffer write miss: ``mem_bus_access_rtt_latency + tRP + tRCD + row_buffer_write_latency``
-
-Memory Access Latency Calculation
----------------------------------
-This section describes in detail how memory access latency is calculated and all the actions involved in the process using an example.
-
-Let us assume that the instruction fetch unit is attempting to read instruction at virtual address ``0x80000000`` for the first time.
-
-Following sequence of actions are involved:
-
-1. Virtual address ``0x80000000`` is sent to the instruction TLB to acquire the corresponding physical address ``0x80000000``. Since the virtual address ``0x80000000`` used in this example belongs to kernel space prior to the start of paging, the TLB lookup is bypassed, meaning, the virtual and physical addresses are identical.
-
-2. Both virtual address (``0x80000000``) and physical address (``0x80000000``) are sent across the cache hierarchy. Since the physical address ``0x80000000`` is being accessed for the first time, it misses in L1 and L2 caches.
-
-3. L2 cache on a miss sends request to memory controller to read ``64`` bytes starting from physical address ``0x80000000``. ``64`` bytes here denote the cache line size, since all the transfer between caches and the memory controller are done at the granularity of cache line size.
-
-4. Memory controller creates a request of following format: (``starting physical address``, ``bytes to access``, ``Operation (Read/Write)``). In this case, following request is created: (``0x80000000``, ``64 bytes``, ``Read``) and added to front-end memory queue and DRAM dispatch queue.
-
-.. note::
-   Internally, for simulating the memory accesses, the simulator maintains 3 queues: Front-end memory queue (which holds the pending accesses to instruction memory), back-end memory queue (which holds the pending accesses to data memory) and dram dispatch queue (which holds the pending memory accesses to both instruction and data memory, but in sequence in which they are generated). Front-end and back-end memory queues are only used to stalling fetch and memory pipeline stages respectively. Actual accesses happen from the top of dram dispatch queue.
-
-5. Until the front-end memory queue is empty, fetch unit stalls.
-
-6. At some point, when the request (``0x80000000``, ``64``, ``Read``) reaches to the top of DRAM dispatch queue and the memory bus is free, memory controller breaks above request on granularity of memory bus width. In this case, memory bus width is configured to be of 64 bits, so it will generate 8 sub-requests each of 64-bits, starting from address ``0x80000000`` and get the dram access latency for each of this sub-requests as follows:
-
-+------------+------------+---------+
-|   Address  | Bits       | Latency |
-+------------+------------+---------+
-| 0x80000000 | 64         | 51      |
-+------------+------------+---------+
-| 0x80000008 | 64         | 17      |
-+------------+------------+---------+
-| 0x80000010 | 64         | 17      |
-+------------+------------+---------+
-| 0x80000018 | 64         | 17      |
-+------------+------------+---------+
-| 0x80000020 | 64         | 17      |
-+------------+------------+---------+
-| 0x80000028 | 64         | 17      |
-+------------+------------+---------+
-| 0x80000030 | 64         | 17      |
-+------------+------------+---------+
-| 0x80000038 | 64         | 17      |
-+------------+------------+---------+
-| Total      | 512 bits   | 170     |
-|            | (64 Bytes) |         |
-+------------+------------+---------+
-
-
-7. Hence the total memory access latency for this instruction is: ``L1_icache_probe_latency (1) + L2_cache_probe_latency (2) + 170 cycles for DRAM access``.
-
-8. Memory bus is marked as busy and after a total of 173 cycles, the memory access is marked as complete, the addresses read are installed in the caches and the request is removed from front-end memory queue and DRAM dispatch queue. The stall on fetch unit is removed and the instruction continues to the next pipeline stage.
-
-.. note::
-   Latency calculations for data memory and hardware page walk in case of TLB misses follows the same exact steps discussed above.
+   Simulated Memory Hierarchy
