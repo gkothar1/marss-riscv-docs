@@ -4,7 +4,7 @@
    contain the root `toctree` directive.
 
 =============================================================================================================
-MARSS-RISCV: Full system cycle accurate micro-architectural research simulator for single-core RISC-V systems
+MARSS-RISCV: TinyEMU based full system cycle-level micro-architectural research simulator for single-core RISC-V systems
 =============================================================================================================
 
    .. toctree::
@@ -12,11 +12,8 @@ MARSS-RISCV: Full system cycle accurate micro-architectural research simulator f
       :caption: Contents:
       :numbered:
 
-      sections/intro
-      sections/TinyEMU
       sections/incore-microarch
       sections/oocore-microarch
       sections/branch-pred
       sections/memory-hierarchy
       sections/running-full-system
-      sections/bibliography/bibliography

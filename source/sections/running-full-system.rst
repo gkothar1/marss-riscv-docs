@@ -3,7 +3,7 @@ Simulating Benchmarks
 =====================
 This section describes how to configure the simulator as per the desired configuration and simulate benchmarks in full system mode. 
 
-For this tutorial, we shall be configuring MARSS-RISCV to simulate a simple 5-stage 32-bit in-order RISC-V processor with basic DRAM model and run `CoreMark <https://github.com/eembc/coremark>`_. Coremark is an industry-standard benchmark that measures the performance of central processing units (CPU) and embedded microcontrollers (MCU).
+For this tutorial, we shall be configuring MARSS-RISCV to simulate a simple 5-stage 32-bit in-order RISC-V system on a chip (SoC) and run `CoreMark <https://github.com/eembc/coremark>`_. Coremark is an industry-standard benchmark that measures the performance of central processing units (CPU) and embedded microcontrollers (MCU).
 
 System Requirements and Dependencies
 ====================================
@@ -17,7 +17,7 @@ System requirements
 
 Installing the dependencies
 ---------------------------
-Ensure that all the dependencies (``ssl``, ``sdl``, and ``curl`` libraries) installed on the system. For Debian-based (including Ubuntu) systems, the packages are: ``build-essential``, ``libssl-dev``, ``libsdl1.2-dev``, ``libcurl4-openssl-dev``.
+Ensure all the dependencies (``ssl``, ``sdl``, and ``curl`` libraries) are installed on the system. For Debian-based (including Ubuntu) systems, the packages are: ``build-essential``, ``libssl-dev``, ``libsdl1.2-dev``, ``libcurl4-openssl-dev``.
 
 .. code-block:: console
 
@@ -40,7 +40,6 @@ Then, ``cd`` into the simulator source directory:
 .. code-block:: console
 
     $ cd marss-riscv/src/
-    $ git submodule update --init --recursive
 
 Open Makefile and set ``CONFIG_XLEN`` to ``32``. Then, compile the simulator using:
 
@@ -48,7 +47,7 @@ Open Makefile and set ``CONFIG_XLEN`` to ``32``. Then, compile the simulator usi
 
     $ make
 
-Preparing the bootloader, kernel and userland image
+Preparing the bootloader, kernel, and userland image
 ===================================================
 
 The simplest way to start is by using a pre-built bootloader, kernel, and userland image. The pre-built 32-bit and 64-bit RISC-V userland, bootloader, and kernel are available here: `marss-riscv-images
@@ -77,7 +76,7 @@ Grow the image file to the desired size (``8GB`` for this tutorial):
 .. note::
    Below steps may require ``sudo`` access.
 
-Find the first available ``losetup`` device. On my system, below command returned: ``/dev/loop8``
+Find the first available ``losetup`` device. On my system, the below command returned: ``/dev/loop8``
 
 .. code-block:: console
 
@@ -120,72 +119,73 @@ At this point, you should have a 32-bit RISC-V Linux image of size 8GB ready to 
 
 Configuring the Simulator
 =========================
-Simulation parameters can be configured using ``config.cfg``, located in ``marss-riscv-images`` folder. We will now configure MARSS-RISCV to simulate a single core 32-bit RISC-V machine with the following configuration:
+Simulation and TinyEMU SoC parameters are configured using the TinyEMU JSON configuration file provided in the configs directory.  We will now configure MARSS-RISCV to simulate a single-core 32-bit RISC-V SoC with the following configuration:
 
-* 32 bit in-order core with 5-stage pipeline with parallel function units enabled
-* 32-entry instruction and data TLB
+* 32-bit in-order core with a 5-stage pipeline, 1GHz clock
+* 32-entry instruction and data TLBs
 * 32-entry 2-way branch target buffer with a simple bimodal predictor, with 256-entry history table
 * 4-entry return address stack
-* single stage integer ALU with 1 cycle delay
-* 2-stage pipelined integer multiplier with 2 cycle delay per stage
-* single stage integer divider with 8 cycles delay
+* single-stage integer ALU with one cycle delay
+* 2-stage pipelined integer multiplier with one-cycle delay per stage
+* single-stage integer divider with eight cycles delay
 * All the instructions in FPU ALU with a latency of 2 cycles
-* 2-stage pipelined floating-point fused multiply-add unit with 2 cycle delay per stage
-* 32KB 8-way L1-instruction and L1-data write-back caches with 1 cycle probe delay and LRU eviction
-* 2MB 16-way L2-shared write-back cache with 2 cycle probe delay and LRU eviction
-* 32-byte cache line size
-* 1024MB DRAM with basic DRAM model with 50 cycles main memory access latency and 32 cycles for reading/writing page table entries
+* 3-stage pipelined floating-point fused multiply-add unit with one-cycle delay per stage
+* 32KB 8-way L1-instruction and L1-data caches with one cycle latency and LRU eviction
+* 2MB 16-way L2-shared cache with 12 cycle latency and LRU eviction
+* 64-byte cache line size with write-back and write-allocate caches
+* 1024MB DRAM with base DRAM model with 75 cycles for  main memory access
 
-Based on the above configuration, the ``config.cfg`` will look like below. You can modify your copy of ``config.cfg`` accordingly or paste the contents below in your copy.
+Based on the above configuration, the ``configuration`` will look like the below. 
 
 .. code-block:: json
 
     /* VM configuration file */
     {
         version: 1,
-        machine: "riscv32",
-        memory_size: 1024,                       /* Use riscv32 for 32-bit */
+        machine: "riscv32", /* riscv32, riscv64 */
+        memory_size: 1024, /* MB */
         bios: "riscv32-unknown-linux-gnu/bbl32.bin",
         kernel: "riscv32-unknown-linux-gnu/kernel-riscv32.bin",
         cmdline: "console=hvc0 root=/dev/vda rw",
         drive0: { file: "riscv32-unknown-linux-gnu/riscv32.img" },
         eth0: { driver: "user" },
 
-        /* MARSS-RISCV config options */
-        core_name: "test-riscv-core",           /* Name of the simulated RISC-V CPU */
-        core_type: "incore",                    /* Core type: In-order (incore) or Out-of-order(oocore) */
+        core: {
+            name: "32-bit inorder riscv CPU",
+            type: "incore", /* incore, oocore */
+            cpu_freq_mhz: 1000,
+            rtc_freq_mhz: 10,
 
-        /** In-order core parameters **/
-        num_cpu_stages: 5,                      /* Number of pipeline stages: 5, 6 */
-        enable_parallel_fu: "true",             /* Enable parallel executions of instructions in multiple functional units */
+            incore : {
+                num_cpu_stages: 5, /* 5, 6 */
+            },
 
-        /** Out-of-order core parameters **/
-        iq_size: 16,                            /* Number of integer issue-queue entries */
-        iq_issue_ports: 3,                      /* Number of issue ports on integer issue-queue */
-        rob_size: 64,                           /* Number of ROB entries */
-        rob_commit_ports:4,                     /* Number of ROB commit ports */
-        lsq_size: 16,                           /* Number of LSQ entries */ 
+            oocore: {
+                iq_size: 16,
+                iq_issue_ports: 3,
+                rob_size: 64,
+                rob_commit_ports:4,
+                lsq_size: 16,
+            },
 
-        /** Tracing and Logging Parameters **/
-        sim_stats_path: ".",                     /* Path to the directory to save simulation stats, NOTE: Absolute path is needed and no `/` is required at the end of the directory path. */
-        sim_trace_file: "simtrace.txt",         /* Path to the file to save commit trace */
-
-        /** Execution Unit Parameters **/
-        execution_units: {
-                num_alu_stages: 1,                      /* Number of stages for integer ALU unit */
-                alu_stage_latency: "1",                 /* Latencies for all integer ALU stages, comma separated. */            
-
-                num_mul_stages: 2,                      /* Number of stages for integer MUL unit */            
-                mul_stage_latency: "2,2",                 /* Latencies for all integer MUL stages, comma separated. eg. "1,2,1" */
-
-                num_div_stages: 1,                      /* Number of stages for integer DIV unit */
-                div_stage_latency: "8",                 /* Latencies for all integer DIV stages, comma separated. eg. "1,2,1" */
-
-                num_fpu_fma_stages: 2,                  /* Number of stages for floating point fused multiply add unit */
-                fpu_fma_stage_latency: "2,2",             /* Latencies for all floating point fused multiply add stages, comma separated. eg. "1,2,1" */
-
-                /* Non-pipelined Floating point ALU latency in CPU cycles */
-                fpu_alu: {
+            /* Note: Latencies for functional units, caches and memory are specified in CPU cycles */
+            functional_units: {
+                num_alu_stages: 1,
+                alu_stage_latency: "1",
+        
+                num_mul_stages: 2,
+                mul_stage_latency: "1,1",
+        
+                num_div_stages: 1,
+                div_stage_latency: "8",
+        
+                /* Note: This will create a pipelined FP-FMA unit with 4 stages with a
+                 * latency of 1 CPU cycle(s) per stage */
+                num_fpu_fma_stages: 2,
+                fpu_fma_stage_latency: "1,1",
+        
+                /* Note: FP-ALU is non-pipelined */
+                fpu_alu_stage_latency: {
                     fadd: 2,
                     fsub: 2,
                     fmul: 2,
@@ -202,87 +202,101 @@ Based on the above configuration, the ``config.cfg`` will look like below. You c
                     fmv: 2,
                     fclass: 2,
                 },
+
+                /* Latency for RISC-V SYSTEM opcode instructions (includes CSR and privileged instructions)*/
+                system_insn_latency: 3,
+            },
+        
+            bpu: {
+                enable: "true", /* true, false */
+                flush_on_context_switch: "false", /* true, false */
+
+                btb: {
+                    size: 32,
+                    ways: 2,
+                    eviction_policy: "lru", /* lru, random */
+                },
+        
+                bpu_type: "bimodal", /* bimodal, adaptive */
+        
+                bimodal: {
+                    bht_size: 256,
+                },
+        
+                adaptive: {
+                    ght_size: 1,
+                    pht_size: 1,
+                    history_bits: 2,
+                    aliasing_func_type: "xor", /* xor, and, none */
+
+                    /* Given config for adaptive predictor will create a Gshare predictor:
+                    *   1) global history table consisting of one entry, entry includes a 2-bit history register
+                    *   2) pattern history table consisting of one entry, entry includes an array of 4 saturating counters
+                    *   3) value of history register will be `xor` ed with branch PC to index into the array of saturating counters
+                    */
+                },
+        
+                ras_size: 4, /* value 0 disables RAS */
+            },
+        
+            caches: {
+                enable_l1_caches: "true", /* true, false */
+                allocate_on_write_miss: "true", /* true, false */
+                write_policy: "writeback", /* writeback, writethrough */
+                line_size: 64, /* Bytes */
+        
+                icache: {
+                    size: 32, /* KB */
+                    ways: 8,
+                    latency: 1,
+                    eviction: "lru", /* lru, random */
+                },
+        
+                dcache: {
+                    size: 32, /* KB */
+                    ways: 8,
+                    latency: 1,
+                    eviction: "lru", /* lru, random */
+                },
+        
+                l2_shared_cache: {
+                    enable: "true",
+                    size: 2048, /* KB */
+                    ways: 16,
+                    latency: 12,
+                    eviction: "lru", /* lru, random */
+                },
+            },
         },
 
-        /** BPU Parameters **/
-        enable_bpu: "true",                     /* Enable branch prediction unit: true, false */
-        btb_size: 32,                           /* Number of entries in BTB, must be power of 2 */
-        btb_ways: 2,                            /* Number of BTB ways */
-        bht_size: 256,                          /* Number of entries in BHT, must be power of 2 */
-        btb_eviction_policy: "lru",             /* Eviction policy for BTB: lru, random */
-        bpu_type: "bimodal",                    /* Type of predictor: bimodal, adaptive */
-        bpu_ght_size: 1,                        /* Number of entries in Global history table, must be power of 2 */
-        bpu_pht_size: 1,                        /* Number of entries in Pattern history table, must be power of 2 */
-        bpu_history_bits: 2,                    /* Number of bits in history register */
-        bpu_aliasing_func_type: "xor",          /* Aliasing function for adaptive predictor: and, xor, none
-                                                       This can be used to construct Gshare(xor) and Gselect(and) predictors
-                                                       when bpu_ght_size and bpu_pht_size are set to 1 */
-        ras_size: 4,                            /* Number of entries in Return address stack, 0 means RAS is disabled */
+        memory: {
+            tlb_size: 32,
 
-        /** DRAM Parameters **/
-        tlb_size: 32,                           /* Number of entries in instruction TLB, load TLB and store TLB */
-        dram_burst_size: 32,                    /* DRAM burst size in bytes (Cache line size if caches are enabled) */
+            /* Memory controller burst-length in bytes */ 
+            /* Note: This is automatically set to cache line size if caches are enabled */
+            burst_length: 64, /* Bytes */
 
-        /** Base DRAM model **/
-        mem_access_latency: 50,                 /* Access latency of main memory in CPU cycles */
-        pte_rw_latency: 32,                     /* Access latency for reading/writing page table entry (PTE) to/from memory in CPU cycles */
+            base_dram_model: {
+                mem_access_latency: 75,
+            },
 
-        /** DRAMSim2 Parameters **/
-        dramsim_ini_file: "DRAMSim2/ini/DDR2_micron_16M_8b_x8_sg3E.ini", /* Path to DRAMSim2 ini file */
-        dramsim_system_ini_file: "DRAMSim2/system.ini.example",          /* Path to DRAMSim2 system ini file */
-        dramsim_stats_dir: ".",                                          /* Path to directory to store DRAMSim2 stats */
+            dramsim3: {
+                config_file: "DRAMsim3/configs/DDR4_4Gb_x16_2400.ini",
+            },
 
-        /** Cache Parameters **/
-        enable_l1_caches: "true",               /* Enable L1 caches: true, false */
-
-        icache: {
-            size: 32,                         /* Size of icache in KB */
-            ways: 8,                          /* Number of ways in icache */
-            read_latency: 1,                  /* Probe latency for icache in CPU cycles */
-            eviction: "lru",                  /* Eviction policy for icache: lru, random */
+            ramulator: {
+                config_file: "ramulator/configs/DDR4-config.cfg",
+            },
         },
-
-        dcache: {
-            size: 32,                        /* Size of dcache in KB */
-            ways: 8,                         /* Number of ways in dcache */
-            read_latency: 1,                 /* Read latency for dcache in CPU cycles */
-            write_latency: 1,                /* Write latency for dcache in CPU cycles */
-            eviction: "lru",                 /* Eviction policy for dcache: lru, random */
-        },
-
-        enable_l2_cache: "true",             /* Enable l2_shared_cache: true, false */
-
-        l2_shared_cache: {
-            size: 2048,                      /* Size of l2_shared_cache in KB */
-            ways: 16,                        /* Number of ways in l2_shared_cache */
-            read_latency: 2,                /* Read latency for l2_shared_cache in CPU cycles */
-            write_latency: 2,               /* Write latency for l2_shared_cache in CPU cycles */
-            eviction: "lru",                /* Eviction policy for l2_shared_cache: lru, random */
-        },
-
-        cache_allocate_on_write_miss: "true",   /* Allocate entry in cache on write miss: true, false  */
-        cache_write_policy: "writeback",        /* Cache write policy: writeback, writethrough */
-        words_per_cache_line: 8,                /* Number of words in each cache line
-                                                   (used to determine cache-line-size = words_per_cache_line * 'XLEN' bits) */
     }
+
 
 Run the simulator
 =================
 
-By default, the simulator will boot in "snapshot" mode, meaning it will **not** retain the file system changes after it is shut down. In order to persist the changes, pass ``-rw`` command-line argument to the simulator. To specify which memory model to use, run MARSS-RISCV with command line option ``-mem-model`` and specify either ``base`` or ``dramsim2``. For DRAMSim2, the paths to ``ini`` and ``system ini file`` can be specified in ``config.cfg`` file. By default, guest boots in emulation mode. To start in simulation mode, run with ``-simstart`` command-line option. However, for now, we will let it start in emulation mode and switch into simulation mode just before running the benchmark. Now change again into ``marss-riscv/src`` directory and type:
-
 .. code-block:: console
 
-    $ ./marss-riscv -rw -ctrlc -mem-model base marss-riscv-images/config.cfg
-
-Once the guest boots, we need to initialize the environment. Normally, this should happen automatically, but it needs to be done explicitly due to an unresolved bug. So, once you have access to the guest machine terminal, type:
-
-.. code-block:: console
-
-    $ export PYTHONPATH=/usr/lib64/python2.7/site-packages/
-    $ env-update
-
-The system is ready for use. It has a working GCC compiler, ssh, git, and more.
+    $ ./marss-riscv -rw -ctrlc -sim-mem-model base <path-to-config-file>
 
 Load the benchmark and the simulation utility programs inside the guest VM
 ==========================================================================
@@ -306,7 +320,7 @@ To install the simulation utility programs, type:
     $ cd marss-riscv-utils
     $ make
 
-This installs the following commands (programs): ``simstart``, ``simstop`` and ``simulate`` which will help us to enable and disable simulation mode, before and after running CoreMark, respectively. 
+This installs the following commands (programs): ``simstart``, ``simstop`` and ``simulate``, which will help us to enable and disable simulation mode, before and after running CoreMark, respectively. 
 
 At this point, we are pretty much ready to run CoreMark.
 
@@ -334,4 +348,4 @@ Then, to simulate the benchmark inside the guest VM, type:
     $ simstart; ./coremark.exe  0x3415 0x3415 0x66 0 7 1 2000  > ./run2.log; simstop;
     $ simstart; ./coremark.exe 8 8 8 0 7 1 2000 > ./run3.log; simstop;
 
-After every ``simstop`` command, the summary of the performance stats is printed on the console, and individual stats file is generated based on the timestamp.
+After every ``simstop`` command, the summary of the performance stats is printed on the console, and the stats file for every run is generated based on the current time-stamp.

@@ -3,7 +3,7 @@ Branch Prediction Unit
 ======================
 
 Branch prediction unit (BPU) is configurable and can run a simple bimodal
-predictor or complex 2-level adaptive predictors like GShare, GSelect, GAg, GAp, PAg, or PAp. This section describes the major hardware structures used in BPU and their interaction with the CPU pipeline.
+predictor or complex 2-level adaptive predictors like GShare, GSelect, GAg, GAp, PAg, or PAp. This section describes the major structures used in BPU and their interaction with the CPU pipeline.
 
 .. figure:: ../figures/bpu.*
    :figwidth: 400 px
@@ -14,19 +14,19 @@ predictor or complex 2-level adaptive predictors like GShare, GSelect, GAg, GAp,
 Branch Target Buffer
 ---------------------
 
-Branch Target Buffer (BTB) is modeled as a set-associative data structure. Supported eviction policies are random eviction and LRU using hot-cold bits.
+Branch Target Buffer (BTB) is modeled as a set-associative data structure. Supported eviction policies are random eviction and bit PLRU.
 
 .. note::
    For a simple bi-modal predictor, we keep the prediction bits in a separate Branch History Table (BHT).
 
 Return Address Stack
 ----------------------
-BPU consists of an optional return address stack (RAS), which keeps track of last ``N`` function return addresses, where ``N`` is the number of entries in RAS. The return address is pushed onto RAS from the decode pipeline stage if the decoded instruction turns out to be a function call. Similarly, if the decoded instruction turns out to be a function return, the address is popped from RAS and forwarded to the fetch stage.
+BPU consists of an optional return address stack (RAS), which keeps track of the last ``N`` function return addresses, where ``N`` is the number of entries in RAS. The return address is pushed onto RAS from the decode pipeline stage if the decoded instruction becomes a function call. Similarly, if the decoded instruction turns out to be a function return, the address is popped from RAS and forwarded to the fetch stage.
 
 Two-Level Adaptive Predictor
 ----------------------------
 
-Level 1 of the adaptive predictor consists of a Global History Table (GHT), and level 2 consists of a Pattern History Table (PHT). Each GHT entry consists of a PC and History Register (HR) of ``N`` bits. Each PHT entry consists of a PC and an array of :math:`2^N` 2-bit saturating up-down counters. Based on the number of entries in GHT and PHT, four different prediction schemes are possible shown in the following table.
+Level 1 of the adaptive predictor consists of a Global History Table (GHT), and level 2 consists of a Pattern History Table (PHT). Each GHT entry consists of a PC and History Register (HR) of ``N`` bits. Each PHT entry consists of a PC and an array of :math:`2^N` 2-bit saturating up-down counters. Based on the number of GHT and PHT entries, four different prediction schemes are possible, shown in the following table.
 
 ================ ================== ===============
 **GHT entries**    **PHT Entries**   **Predictor**
@@ -44,7 +44,7 @@ CPU pipeline interacts with the Branch Prediction Unit in mainly four ways as fo
 
 * **Probing the branch predictor**
 
-   * In Fetch stage, the branch predictor is probed using the virtual address of the instruction
+   * In the Fetch stage, the branch predictor is probed using the virtual address of the instruction
 
    * If the address is present in the BTB, then probe returns hit
 
@@ -60,7 +60,7 @@ CPU pipeline interacts with the Branch Prediction Unit in mainly four ways as fo
 
 * **Adding entries to branch predictor structures**
 
-   * If the instruction is missed in the BPU during the fetch stage and is decoded as a branch, BTB entry is created for this instruction from the decode stage
+   *  A BTB entry is created for a branch instruction missed in the BTB when the branch is resolved.
 
    * In case of two-level adaptive predictor, required entries are also created in GHT and PHT based on the prediction scheme, for conditional branches
 
